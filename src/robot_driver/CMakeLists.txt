@@ -9,23 +9,18 @@ find_package(rclcpp REQUIRED)
 find_package(geometry_msgs REQUIRED)
 find_package(std_msgs REQUIRED)
 
-# Find libgpiod
-find_library(GPIOD_LIBRARY NAMES gpiod)
-find_path(GPIOD_INCLUDE_DIR NAMES gpiod.h)
-
 add_executable(driver_node
-  src/motor.cpp
+  src/serial_port.cpp
+  src/yahboom_driver.cpp
   src/pid_controller.cpp
   src/base_controller.cpp
   src/driver_node.cpp
 )
 
-target_include_directories(driver_node PRIVATE
-  include
-  ${GPIOD_INCLUDE_DIR}
-)
+target_include_directories(driver_node PRIVATE include)
 
-target_link_libraries(driver_node ${GPIOD_LIBRARY})
+find_package(Threads REQUIRED)
+target_link_libraries(driver_node Threads::Threads)
 
 ament_target_dependencies(driver_node
   rclcpp

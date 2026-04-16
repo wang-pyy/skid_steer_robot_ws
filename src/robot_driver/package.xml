@@ -2,8 +2,8 @@
 <?xml-model href="http://download.ros.org/schema/package_format3.xsd" schematypens="http://www.w3.org/2001/XMLSchema"?>
 <package format="3">
   <name>robot_driver</name>
-  <version>0.1.0</version>
-  <description>Skid-steer motor driver with PID control via libgpiod</description>
+  <version>0.2.0</version>
+  <description>Skid-steer motor driver over USB serial for Yahboom 4-channel motor driver board</description>
   <maintainer email="user@todo.todo">user</maintainer>
   <license>MIT</license>
 
@@ -12,8 +12,6 @@
   <depend>rclcpp</depend>
   <depend>geometry_msgs</depend>
   <depend>std_msgs</depend>
-
-  <build_depend>libgpiod-dev</build_depend>
 
   <export>
     <build_type>ament_cmake</build_type>

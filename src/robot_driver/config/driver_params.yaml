@@ -1,62 +1,60 @@
-# Motor driver parameters for skid-steer robot
-# Adjust GPIO pin numbers to match your wiring.
+# Yahboom 4-channel motor driver — USB serial (ASCII protocol).
 #
-# RPi 5: user GPIO is on /dev/gpiochip4
-# RPi 4: user GPIO is on /dev/gpiochip0
-#
-# Each motor uses an H-bridge (e.g. L298N):
-#   IN1 + IN2 = direction,  ENA = speed (software PWM)
+# Protocol (frames delimited by '$' ... '#'):
+#   TX: $spd:m1,m2,m3,m4#     target speed in mm/s per channel
+#       $pwm:m1,m2,m3,m4#     raw PWM per channel
+#   RX: $MSPD:s1,s2,s3,s4#    measured speed (mm/s)
+#       $MTEP:e1,e2,e3,e4#    encoder ticks
+#       $MAll:...#            combined status
 
 driver_node:
   ros__parameters:
-    gpio_chip: "/dev/gpiochip4"
+    # ---- Serial link ----
+    serial_port: "/dev/ttyUSB0"
+    baudrate: 115200
 
-    # Front-left motor
-    motor_fl_in1: 17
-    motor_fl_in2: 27
-    motor_fl_ena: 22
+    # ---- Channel mapping (physical wheel → board channel 1..4) ----
+    channel_fl: 1
+    channel_fr: 2
+    channel_rl: 3
+    channel_rr: 4
+    invert_left:  false      # flip sign if left wheels spin backwards
+    invert_right: false
 
-    # Front-right motor
-    motor_fr_in1: 23
-    motor_fr_in2: 24
-    motor_fr_ena: 25
+    # ---- Control mode ----
+    # "spd": host sends target wheel speeds, board closes the loop.
+    # "pwm": host runs PID on MSPD feedback and sends raw PWM.
+    control_mode: "spd"
+    pwm_max: 1000            # PWM range is [-pwm_max, +pwm_max] in "pwm" mode
 
-    # Rear-left motor
-    motor_rl_in1: 5
-    motor_rl_in2: 6
-    motor_rl_ena: 13
+    # ---- Robot geometry ----
+    wheel_radius: 0.033      # m
+    track_width:  0.23       # m
 
-    # Rear-right motor
-    motor_rr_in1: 16
-    motor_rr_in2: 20
-    motor_rr_ena: 21
+    # ---- Speed limits ----
+    max_linear_speed:  0.5   # m/s
+    max_angular_speed: 2.0   # rad/s
 
-    # Software PWM frequency (Hz). 1000 Hz is typical for DC motors.
-    pwm_frequency: 1000
-
-    # Maximum duty cycle (0.0–1.0). Leave headroom to protect the H-bridge.
-    max_duty_cycle: 0.95
-
-    # Robot geometry
-    wheel_radius: 0.033       # metres
-    track_width: 0.23         # metres (left-right wheel center distance)
-
-    # Speed limits
-    max_linear_speed: 0.5     # m/s
-    max_angular_speed: 2.0    # rad/s
-
-    # PID gains (tune on real hardware)
+    # ---- PID (only used when control_mode == "pwm") ----
     pid_kp: 1.0
     pid_ki: 0.5
     pid_kd: 0.01
-    pid_max_output: 1.0
+    pid_max_output:   1.0
     pid_max_integral: 0.5
 
-    # Control loop frequency (Hz)
+    # ---- Loop ----
     control_frequency: 50.0
+    cmd_vel_timeout:   0.5
 
-    # Auto-stop if no cmd_vel received for this many seconds
-    cmd_vel_timeout: 0.5
-
-    # Set to true to bypass PID and run pure open-loop (useful for initial testing)
-    open_loop: false
+    # ---- Board-side configuration (sent once on startup) ----
+    # Set apply_board_config: true to push these to the board.
+    # Any numeric param left at 0 is skipped.
+    apply_board_config: false
+    motor_type:        0
+    deadzone:          0
+    encoder_lines:     0
+    motor_phase:       0
+    wheel_diameter_mm: 0
+    upload_mall: 0           # 1 = enable $MAll upload
+    upload_mtep: 1           # 1 = enable $MTEP upload
+    upload_mspd: 1           # 1 = enable $MSPD upload

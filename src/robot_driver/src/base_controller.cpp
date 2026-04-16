@@ -1,18 +1,14 @@
 #include "robot_driver/base_controller.hpp"
+
 #include <algorithm>
 #include <cmath>
 
 BaseController::BaseController(const Config& cfg)
     : cfg_(cfg) {
-    // Create four motors
-    motor_fl_ = std::make_unique<Motor>(
-        cfg_.gpio_chip, cfg_.fl.in1, cfg_.fl.in2, cfg_.fl.ena, cfg_.pwm_frequency);
-    motor_fr_ = std::make_unique<Motor>(
-        cfg_.gpio_chip, cfg_.fr.in1, cfg_.fr.in2, cfg_.fr.ena, cfg_.pwm_frequency);
-    motor_rl_ = std::make_unique<Motor>(
-        cfg_.gpio_chip, cfg_.rl.in1, cfg_.rl.in2, cfg_.rl.ena, cfg_.pwm_frequency);
-    motor_rr_ = std::make_unique<Motor>(
-        cfg_.gpio_chip, cfg_.rr.in1, cfg_.rr.in2, cfg_.rr.ena, cfg_.pwm_frequency);
+    YahboomDriver::Config dcfg;
+    dcfg.port     = cfg_.port;
+    dcfg.baudrate = cfg_.baudrate;
+    driver_ = std::make_unique<YahboomDriver>(dcfg);
 }
 
 BaseController::~BaseController() {
@@ -20,15 +16,12 @@ BaseController::~BaseController() {
 }
 
 void BaseController::set_target(double linear_x, double angular_z) {
-    // Clamp inputs
-    linear_x  = std::clamp(linear_x, -cfg_.max_linear_speed, cfg_.max_linear_speed);
+    linear_x  = std::clamp(linear_x,  -cfg_.max_linear_speed,  cfg_.max_linear_speed);
     angular_z = std::clamp(angular_z, -cfg_.max_angular_speed, cfg_.max_angular_speed);
 
-    // Differential drive inverse kinematics
     target_left_vel_  = linear_x - angular_z * cfg_.track_width / 2.0;
     target_right_vel_ = linear_x + angular_z * cfg_.track_width / 2.0;
 
-    // Scale down if either side exceeds max speed
     double max_vel = std::max(std::abs(target_left_vel_), std::abs(target_right_vel_));
     if (max_vel > cfg_.max_linear_speed) {
         double scale = cfg_.max_linear_speed / max_vel;
@@ -37,54 +30,77 @@ void BaseController::set_target(double linear_x, double angular_z) {
     }
 }
 
-void BaseController::update(double measured_left, double measured_right, double dt) {
-    if (cfg_.open_loop) {
-        // Open-loop: map target velocity directly to duty cycle
-        output_left_duty_  = target_left_vel_ / cfg_.max_linear_speed * cfg_.max_duty_cycle;
-        output_right_duty_ = target_right_vel_ / cfg_.max_linear_speed * cfg_.max_duty_cycle;
+std::array<int, 4> BaseController::to_channels(int left_value, int right_value) const {
+    std::array<int, 4> ch{{0, 0, 0, 0}};
+    auto assign = [&](int channel, int value) {
+        if (channel >= 1 && channel <= 4) ch[channel - 1] = value;
+    };
+    int left  = cfg_.invert_left  ? -left_value  : left_value;
+    int right = cfg_.invert_right ? -right_value : right_value;
+    assign(cfg_.channels.fl, left);
+    assign(cfg_.channels.rl, left);
+    assign(cfg_.channels.fr, right);
+    assign(cfg_.channels.rr, right);
+    return ch;
+}
+
+void BaseController::update(double dt) {
+    if (!driver_ || !driver_->is_open()) return;
+
+    // Pull latest measured speeds (mm/s from board) averaged per side.
+    auto fb = driver_->feedback();
+    auto pick = [&](int ch) -> double {
+        if (ch < 1 || ch > 4) return 0.0;
+        return fb.speeds[ch - 1] / 1000.0;          // mm/s → m/s
+    };
+    measured_left_vel_  = (pick(cfg_.channels.fl) + pick(cfg_.channels.rl)) / 2.0;
+    measured_right_vel_ = (pick(cfg_.channels.fr) + pick(cfg_.channels.rr)) / 2.0;
+    if (cfg_.invert_left)  measured_left_vel_  = -measured_left_vel_;
+    if (cfg_.invert_right) measured_right_vel_ = -measured_right_vel_;
+
+    if (cfg_.mode == ControlMode::Speed) {
+        // Send m/s target as mm/s integers; board handles closed loop.
+        int left_mms  = static_cast<int>(std::lround(target_left_vel_  * 1000.0));
+        int right_mms = static_cast<int>(std::lround(target_right_vel_ * 1000.0));
+        auto ch = to_channels(left_mms, right_mms);
+        driver_->set_speed(ch[0], ch[1], ch[2], ch[3]);
+
+        output_left_duty_  = target_left_vel_  / cfg_.max_linear_speed;
+        output_right_duty_ = target_right_vel_ / cfg_.max_linear_speed;
     } else {
-        // Closed-loop PID
-        output_left_duty_  = pid_left_.compute(target_left_vel_, measured_left, dt);
-        output_right_duty_ = pid_right_.compute(target_right_vel_, measured_right, dt);
+        // PID on host: setpoint and measured are both m/s.
+        double u_left  = pid_left_.compute(target_left_vel_,  measured_left_vel_,  dt);
+        double u_right = pid_right_.compute(target_right_vel_, measured_right_vel_, dt);
+        u_left  = std::clamp(u_left,  -1.0, 1.0);
+        u_right = std::clamp(u_right, -1.0, 1.0);
+        output_left_duty_  = u_left;
+        output_right_duty_ = u_right;
+
+        int pwm_left  = static_cast<int>(std::lround(u_left  * cfg_.pwm_max));
+        int pwm_right = static_cast<int>(std::lround(u_right * cfg_.pwm_max));
+        auto ch = to_channels(pwm_left, pwm_right);
+        driver_->set_pwm(ch[0], ch[1], ch[2], ch[3]);
     }
-
-    // Clamp duty cycle
-    output_left_duty_  = std::clamp(output_left_duty_, -cfg_.max_duty_cycle, cfg_.max_duty_cycle);
-    output_right_duty_ = std::clamp(output_right_duty_, -cfg_.max_duty_cycle, cfg_.max_duty_cycle);
-
-    // Apply to motors (same-side wheels get the same command)
-    if (motor_fl_) motor_fl_->set_speed(output_left_duty_);
-    if (motor_rl_) motor_rl_->set_speed(output_left_duty_);
-    if (motor_fr_) motor_fr_->set_speed(output_right_duty_);
-    if (motor_rr_) motor_rr_->set_speed(output_right_duty_);
 }
 
 void BaseController::stop_all() {
-    target_left_vel_ = 0.0;
-    target_right_vel_ = 0.0;
-    output_left_duty_ = 0.0;
+    target_left_vel_   = 0.0;
+    target_right_vel_  = 0.0;
+    output_left_duty_  = 0.0;
     output_right_duty_ = 0.0;
 
-    if (motor_fl_) motor_fl_->stop();
-    if (motor_fr_) motor_fr_->stop();
-    if (motor_rl_) motor_rl_->stop();
-    if (motor_rr_) motor_rr_->stop();
-
+    if (driver_ && driver_->is_open()) {
+        driver_->set_speed(0, 0, 0, 0);
+        driver_->set_pwm(0, 0, 0, 0);
+    }
     pid_left_.reset();
     pid_right_.reset();
 }
 
 void BaseController::set_pid_gains(double kp, double ki, double kd,
-                                    double max_output, double max_integral) {
+                                   double max_output, double max_integral) {
     pid_left_.set_gains(kp, ki, kd);
     pid_left_.set_limits(max_output, max_integral);
     pid_right_.set_gains(kp, ki, kd);
     pid_right_.set_limits(max_output, max_integral);
-}
-
-bool BaseController::is_initialized() const {
-    return motor_fl_ && motor_fl_->is_initialized() &&
-           motor_fr_ && motor_fr_->is_initialized() &&
-           motor_rl_ && motor_rl_->is_initialized() &&
-           motor_rr_ && motor_rr_->is_initialized();
 }
