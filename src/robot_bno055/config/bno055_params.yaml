@@ -1,0 +1,30 @@
+# BNO055 IMU parameters
+#
+# Operation modes:
+#   0x0C = NDOF  – Full 9-axis fusion (accel + gyro + mag). Best heading accuracy
+#                  but sensitive to magnetic interference from motors / metal.
+#   0x08 = IMU   – 6-axis fusion (accel + gyro only). No absolute heading but
+#                  immune to magnetic interference. Use this if mag calibration
+#                  remains poor (mag status stays at 0–1).
+
+bno055_node:
+  ros__parameters:
+    i2c_bus: "/dev/i2c-1"
+    i2c_address: 0x28
+    frame_id: "imu_link"
+    publish_frequency: 50.0
+    operation_mode: 0x0C
+
+    # Orientation covariance diagonal [roll, pitch, yaw] (rad²)
+    # BNO055 absolute heading accuracy: ~2-3° → variance ≈ (3*pi/180)² ≈ 0.0027
+    # Roll/pitch accuracy: ~1° → variance ≈ 0.0003
+    # Using conservative values below.
+    orientation_covariance: [0.0025, 0.0025, 0.0025]
+
+    # Angular velocity covariance diagonal [wx, wy, wz] ((rad/s)²)
+    # BNO055 gyro noise density: ~0.014 °/s/√Hz
+    angular_velocity_covariance: [0.0004, 0.0004, 0.0004]
+
+    # Linear acceleration covariance diagonal [ax, ay, az] ((m/s²)²)
+    # BNO055 accel noise: ~0.08 m/s² RMS
+    linear_acceleration_covariance: [0.0064, 0.0064, 0.0064]

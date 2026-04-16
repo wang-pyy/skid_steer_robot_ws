@@ -1,0 +1,62 @@
+# Motor driver parameters for skid-steer robot
+# Adjust GPIO pin numbers to match your wiring.
+#
+# RPi 5: user GPIO is on /dev/gpiochip4
+# RPi 4: user GPIO is on /dev/gpiochip0
+#
+# Each motor uses an H-bridge (e.g. L298N):
+#   IN1 + IN2 = direction,  ENA = speed (software PWM)
+
+driver_node:
+  ros__parameters:
+    gpio_chip: "/dev/gpiochip4"
+
+    # Front-left motor
+    motor_fl_in1: 17
+    motor_fl_in2: 27
+    motor_fl_ena: 22
+
+    # Front-right motor
+    motor_fr_in1: 23
+    motor_fr_in2: 24
+    motor_fr_ena: 25
+
+    # Rear-left motor
+    motor_rl_in1: 5
+    motor_rl_in2: 6
+    motor_rl_ena: 13
+
+    # Rear-right motor
+    motor_rr_in1: 16
+    motor_rr_in2: 20
+    motor_rr_ena: 21
+
+    # Software PWM frequency (Hz). 1000 Hz is typical for DC motors.
+    pwm_frequency: 1000
+
+    # Maximum duty cycle (0.0–1.0). Leave headroom to protect the H-bridge.
+    max_duty_cycle: 0.95
+
+    # Robot geometry
+    wheel_radius: 0.033       # metres
+    track_width: 0.23         # metres (left-right wheel center distance)
+
+    # Speed limits
+    max_linear_speed: 0.5     # m/s
+    max_angular_speed: 2.0    # rad/s
+
+    # PID gains (tune on real hardware)
+    pid_kp: 1.0
+    pid_ki: 0.5
+    pid_kd: 0.01
+    pid_max_output: 1.0
+    pid_max_integral: 0.5
+
+    # Control loop frequency (Hz)
+    control_frequency: 50.0
+
+    # Auto-stop if no cmd_vel received for this many seconds
+    cmd_vel_timeout: 0.5
+
+    # Set to true to bypass PID and run pure open-loop (useful for initial testing)
+    open_loop: false
