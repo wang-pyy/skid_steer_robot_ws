@@ -17,8 +17,6 @@
   <depend>tf2</depend>
   <depend>tf2_ros</depend>
 
-  <build_depend>libgpiod-dev</build_depend>
-
   <export>
     <build_type>ament_cmake</build_type>
   </export>

@@ -1,34 +1,34 @@
-# Encoder odometry parameters
-# Adjust GPIO pins to match your encoder wiring.
-# Each encoder has two channels: A (pulse) and B (direction).
-# If using single-phase encoders, set single_phase: true and B pins are ignored.
+# Wheel odometry parameters.
+#
+# Encoder ticks are published by robot_driver (via serial from the Yahboom
+# board) on /driver/motor_encoders (std_msgs/Int32MultiArray, 4 channels).
+# This node subscribes to that topic and integrates differential-drive
+# odometry — no GPIO access here.
 
 odom_node:
   ros__parameters:
-    gpio_chip: "/dev/gpiochip4"
+    # Topic that carries raw per-channel encoder ticks.
+    encoder_topic: "/driver/motor_encoders"
 
-    # Encoder GPIO pins (BCM numbering)
-    # These defaults assume you've wired encoders to available GPIO pins.
-    # Change to match your actual wiring.
-    encoder_fl_a: 2
-    encoder_fl_b: 3
-    encoder_fr_a: 4
-    encoder_fr_b: 14
-    encoder_rl_a: 15
-    encoder_rl_b: 18
-    encoder_rr_a: 7
-    encoder_rr_b: 8
+    # Channel mapping (must match driver_params.yaml channel_{fl,fr,rl,rr}).
+    # Board channels are 1-based; array index = channel - 1.
+    channel_fl: 1
+    channel_fr: 2
+    channel_rl: 3
+    channel_rr: 4
 
-    # Set true if your encoders have only one output channel
-    single_phase: false
+    # Per-wheel sign inversion if a wheel's tick count runs opposite to
+    # its physical forward direction.
+    invert_fl: false
+    invert_fr: false
+    invert_rl: false
+    invert_rr: false
 
-    # Encoder PPR (pulses per revolution) on the motor shaft
-    # Common values: 7, 11, 13 for small DC gearmotor encoders
-    counts_per_rev: 11
-
-    # Gear ratio: how many motor shaft turns per one wheel turn
-    # e.g., 30:1 gearbox → gear_ratio = 30.0
-    gear_ratio: 30.0
+    # Encoder characteristics used to convert ticks → wheel radians.
+    # ticks_per_wheel_rev = counts_per_rev * (4 if quadrature else 1) * gear_ratio
+    counts_per_rev: 11        # PPR on the motor shaft
+    gear_ratio: 30.0          # motor revs per wheel rev
+    quadrature: true          # board decodes x4 edges per pulse
 
     # Robot geometry (must match driver_params.yaml)
     wheel_radius: 0.033
@@ -42,7 +42,6 @@ odom_node:
     base_frame: "base_link"
 
     # Pose covariance diagonal [x, y, z, roll, pitch, yaw]
-    # These are initial estimates; tune based on real-world testing.
     pose_covariance_diagonal: [0.001, 0.001, 0.0, 0.0, 0.0, 0.01]
 
     # Twist covariance diagonal [vx, vy, vz, wx, wy, wz]

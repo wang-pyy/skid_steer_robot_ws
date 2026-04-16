@@ -13,21 +13,12 @@ find_package(geometry_msgs REQUIRED)
 find_package(tf2 REQUIRED)
 find_package(tf2_ros REQUIRED)
 
-find_library(GPIOD_LIBRARY NAMES gpiod)
-find_path(GPIOD_INCLUDE_DIR NAMES gpiod.h)
-
 add_executable(odom_node
-  src/encoder.cpp
   src/odometry.cpp
   src/odom_node.cpp
 )
 
-target_include_directories(odom_node PRIVATE
-  include
-  ${GPIOD_INCLUDE_DIR}
-)
-
-target_link_libraries(odom_node ${GPIOD_LIBRARY})
+target_include_directories(odom_node PRIVATE include)
 
 ament_target_dependencies(odom_node
   rclcpp nav_msgs sensor_msgs std_msgs geometry_msgs tf2 tf2_ros
